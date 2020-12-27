@@ -3,13 +3,15 @@
 import React, { Component } from "react";
 
 import TableInteractive from "../components/TableInteractive.jsx";
-import TableSimple from "../components/TableSimple.jsx";
-import { t } from "c-3po";
+import TableSimple from "../components/TableSimple";
+import { t } from "ttag";
 import * as DataGrid from "metabase/lib/data_grid";
 import { findColumnIndexForColumnSetting } from "metabase/lib/dataset";
+import { getOptionFromColumn } from "metabase/visualizations/lib/settings/utils";
+import { getColumnCardinality } from "metabase/visualizations/lib/utils";
 import { formatColumn } from "metabase/lib/formatting";
 
-import Query from "metabase/lib/query";
+import * as Q_DEPRECATED from "metabase/lib/query";
 import {
   isMetric,
   isDimension,
@@ -20,11 +22,11 @@ import {
   isImageURL,
   isAvatarURL,
 } from "metabase/lib/schema_metadata";
-import { columnsAreValid } from "metabase/visualizations/lib/utils";
-import ChartSettingOrderedColumns from "metabase/visualizations/components/settings/ChartSettingOrderedColumns.jsx";
+
+import ChartSettingOrderedColumns from "metabase/visualizations/components/settings/ChartSettingOrderedColumns";
 import ChartSettingsTableFormatting, {
   isFormattable,
-} from "metabase/visualizations/components/settings/ChartSettingsTableFormatting.jsx";
+} from "metabase/visualizations/components/settings/ChartSettingsTableFormatting";
 
 import { makeCellBackgroundGetter } from "metabase/visualizations/lib/table_format";
 import { columnSettings } from "metabase/visualizations/lib/settings/column";
@@ -35,13 +37,13 @@ import cx from "classnames";
 import RetinaImage from "react-retina-image";
 import { getIn } from "icepick";
 
-import type { DatasetData } from "metabase/meta/types/Dataset";
-import type { Card, VisualizationSettings } from "metabase/meta/types/Card";
+import type { DatasetData } from "metabase-types/types/Dataset";
+import type { VisualizationSettings } from "metabase-types/types/Card";
+import type { Series } from "metabase-types/types/Visualization";
 import type { SettingDefs } from "metabase/visualizations/lib/settings";
 
 type Props = {
-  card: Card,
-  data: DatasetData,
+  series: Series,
   settings: VisualizationSettings,
   isDashboard: boolean,
 };
@@ -59,11 +61,19 @@ export default class Table extends Component {
 
   static minSize = { width: 4, height: 3 };
 
-  static isSensible(cols, rows) {
+  static isSensible({ cols, rows }) {
     return true;
   }
 
-  static checkRenderable([{ data: { cols, rows } }]) {
+  static isLiveResizable(series) {
+    return false;
+  }
+
+  static checkRenderable([
+    {
+      data: { cols, rows },
+    },
+  ]) {
     // scalar can always be rendered, nothing needed here
   }
 
@@ -77,27 +87,104 @@ export default class Table extends Component {
       getDefault: ([{ card, data }]) =>
         data &&
         data.cols.length === 3 &&
-        Query.isStructured(card.dataset_query) &&
+        Q_DEPRECATED.isStructured(card.dataset_query) &&
         data.cols.filter(isMetric).length === 1 &&
         data.cols.filter(isDimension).length === 2,
     },
+    "table.pivot_column": {
+      section: t`Columns`,
+      title: t`Pivot column`,
+      widget: "field",
+      getDefault: (
+        [
+          {
+            data: { cols, rows },
+          },
+        ],
+        settings,
+      ) => {
+        const col = _.min(cols.filter(isDimension), col =>
+          getColumnCardinality(cols, rows, cols.indexOf(col)),
+        );
+        return col && col.name;
+      },
+      getProps: (
+        [
+          {
+            data: { cols },
+          },
+        ],
+        settings,
+      ) => ({
+        options: cols.filter(isDimension).map(getOptionFromColumn),
+      }),
+      getHidden: (series, settings) => !settings["table.pivot"],
+      readDependencies: ["table.pivot"],
+      persistDefault: true,
+    },
+    "table.cell_column": {
+      section: t`Columns`,
+      title: t`Cell column`,
+      widget: "field",
+      getDefault: ([{ data }], { "table.pivot_column": pivotCol }) => {
+        // We try to show numeric values in pivot cells, but if none are
+        // available, we fall back to the last column in the unpivoted table
+        const nonPivotCols = data.cols.filter(c => c.name !== pivotCol);
+        const lastCol = nonPivotCols[nonPivotCols.length - 1];
+        const { name } = nonPivotCols.find(isMetric) || lastCol || {};
+        return name;
+      },
+      getProps: (
+        [
+          {
+            data: { cols },
+          },
+        ],
+        settings,
+      ) => ({
+        options: cols.map(getOptionFromColumn),
+      }),
+      getHidden: (
+        [
+          {
+            data: { cols },
+          },
+        ],
+        settings,
+      ) => !settings["table.pivot"],
+      readDependencies: ["table.pivot", "table.pivot_column"],
+      persistDefault: true,
+    },
+    // NOTE: table column settings may be identified by fieldRef (possible not normalized) or column name:
+    //   { name: "COLUMN_NAME", enabled: true }
+    //   { fieldRef: ["fk->", 1, 2], enabled: true }
+    //   { fieldRef: ["fk->", ["field-id", 1], ["field-id", 2]], enabled: true }
     "table.columns": {
       section: t`Columns`,
       title: t`Visible columns`,
       widget: ChartSettingOrderedColumns,
       getHidden: (series, vizSettings) => vizSettings["table.pivot"],
       isValid: ([{ card, data }]) =>
-        card.visualization_settings["table.columns"] &&
-        columnsAreValid(
-          card.visualization_settings["table.columns"].map(x => x.name),
-          data,
+        _.all(
+          card.visualization_settings["table.columns"],
+          columnSetting =>
+            findColumnIndexForColumnSetting(data.cols, columnSetting) >= 0,
         ),
-      getDefault: ([{ data: { cols } }]) =>
+      getDefault: ([
+        {
+          data: { cols },
+        },
+      ]) =>
         cols.map(col => ({
           name: col.name,
+          fieldRef: col.field_ref,
           enabled: col.visibility_type !== "details-only",
         })),
-      getProps: ([{ data: { cols } }]) => ({
+      getProps: ([
+        {
+          data: { cols },
+        },
+      ]) => ({
         columns: cols,
       }),
     },
@@ -106,16 +193,36 @@ export default class Table extends Component {
       section: t`Conditional Formatting`,
       widget: ChartSettingsTableFormatting,
       default: [],
-      getProps: ([{ data: { cols } }], settings) => ({
+      getProps: (
+        [
+          {
+            data: { cols },
+          },
+        ],
+        settings,
+      ) => ({
         cols: cols.filter(isFormattable),
         isPivoted: settings["table.pivot"],
       }),
-      getHidden: ([{ data: { cols } }], settings) =>
-        cols.filter(isFormattable).length === 0,
+      getHidden: (
+        [
+          {
+            data: { cols },
+          },
+        ],
+        settings,
+      ) => cols.filter(isFormattable).length === 0,
       readDependencies: ["table.pivot"],
     },
     "table._cell_background_getter": {
-      getValue([{ data: { rows, cols } }], settings) {
+      getValue(
+        [
+          {
+            data: { rows, cols },
+          },
+        ],
+        settings,
+      ) {
         return makeCellBackgroundGetter(rows, cols, settings);
       },
       readDependencies: ["table.column_formatting", "table.pivot"],
@@ -129,6 +236,7 @@ export default class Table extends Component {
         widget: "input",
         getDefault: column => formatColumn(column),
       },
+      click_behavior: {},
     };
     if (isNumber(column)) {
       settings["show_mini_bar"] = {
@@ -178,6 +286,7 @@ export default class Table extends Component {
           settings["view_as"] !== "email_link",
       };
     }
+
     return settings;
   };
 
@@ -194,9 +303,8 @@ export default class Table extends Component {
   }
 
   componentWillReceiveProps(newProps: Props) {
-    // TODO: remove use of deprecated "card" and "data" props
     if (
-      newProps.data !== this.props.data ||
+      newProps.series !== this.props.series ||
       !_.isEqual(newProps.settings, this.props.settings)
     ) {
       this._updateData(newProps);
@@ -204,18 +312,36 @@ export default class Table extends Component {
   }
 
   _updateData({
-    data,
+    series: [{ data }],
     settings,
   }: {
-    data: DatasetData,
+    series: Series,
     settings: VisualizationSettings,
   }) {
     if (settings["table.pivot"]) {
+      const pivotIndex = _.findIndex(
+        data.cols,
+        col => col.name === settings["table.pivot_column"],
+      );
+      const cellIndex = _.findIndex(
+        data.cols,
+        col => col.name === settings["table.cell_column"],
+      );
+      const normalIndex = _.findIndex(
+        data.cols,
+        (col, index) => index !== pivotIndex && index !== cellIndex,
+      );
       this.setState({
-        data: DataGrid.pivot(data),
+        data: DataGrid.pivot(
+          data,
+          normalIndex,
+          pivotIndex,
+          cellIndex,
+          settings,
+        ),
       });
     } else {
-      const { cols, rows, columns } = data;
+      const { cols, rows } = data;
       const columnSettings = settings["table.columns"];
       const columnIndexes = columnSettings
         .filter(columnSetting => columnSetting.enabled)
@@ -227,15 +353,37 @@ export default class Table extends Component {
       this.setState({
         data: {
           cols: columnIndexes.map(i => cols[i]),
-          columns: columnIndexes.map(i => columns[i]),
           rows: rows.map(row => columnIndexes.map(i => row[i])),
         },
       });
     }
   }
 
+  // shared helpers for table implementations
+
+  getColumnTitle = (columnIndex: number): ?string => {
+    const cols = this.state.data && this.state.data.cols;
+    if (!cols) {
+      return null;
+    }
+    const { settings } = this.props;
+    const isPivoted = settings["table.pivot"];
+    const column = cols[columnIndex];
+    if (isPivoted) {
+      return formatColumn(column) || (columnIndex !== 0 ? t`Unset` : null);
+    } else {
+      return (
+        settings.column(column)["_column_title_full"] || formatColumn(column)
+      );
+    }
+  };
+
   render() {
-    const { card, isDashboard, settings } = this.props;
+    const {
+      series: [{ card }],
+      isDashboard,
+      settings,
+    } = this.props;
     const { data } = this.state;
     const sort = getIn(card, ["dataset_query", "query", "order-by"]) || null;
     const isPivoted = settings["table.pivot"];
@@ -272,6 +420,7 @@ export default class Table extends Component {
           data={data}
           isPivoted={isPivoted}
           sort={sort}
+          getColumnTitle={this.getColumnTitle}
         />
       );
     }

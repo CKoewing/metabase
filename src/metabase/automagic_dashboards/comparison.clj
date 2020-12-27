@@ -12,7 +12,7 @@
             [metabase.mbql.normalize :as normalize]
             [metabase.models.table :refer [Table]]
             [metabase.query-processor.util :as qp.util]
-            [puppetlabs.i18n.core :as i18n :refer [tru]]))
+            [metabase.util.i18n :refer [tru]]))
 
 (def ^:private ^{:arglists '([root])} comparison-name
   (comp capitalize-first (some-fn :comparison-name :full-name)))
@@ -93,7 +93,8 @@
                                                  :card                   card
                                                  :card_id                (:id card)
                                                  :series                 series
-                                                 :visualization_settings {:graph.y_axis.auto_split false}
+                                                 :visualization_settings {:graph.y_axis.auto_split false
+                                                                          :graph.series_labels [(:name card) (:name (first series))]}
                                                  :id                     (gensym)}))
         (let [width        (/ populate/grid-width 2)
               series-left  (map clone-card (:series card-left))

@@ -4,6 +4,7 @@ import cx from "classnames";
 
 const ChartSettingsWidget = ({
   title,
+  description,
   hidden,
   disabled,
   widget: Widget,
@@ -20,13 +21,14 @@ const ChartSettingsWidget = ({
   return (
     <div
       className={cx({
-        mb2: !hidden,
+        mb3: !hidden,
         mx4: !noPadding,
         hide: hidden,
         disable: disabled,
       })}
     >
-      {title && <h4 className="mb1">{title}</h4>}
+      {title && <h4 className="mb1 flex align-center">{title}</h4>}
+      {description && <div className="mb1">{description}</div>}
       {Widget && (
         <Widget
           value={value}

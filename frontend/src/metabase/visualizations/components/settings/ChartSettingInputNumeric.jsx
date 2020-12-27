@@ -20,6 +20,7 @@ export default class ChartSettingInputNumeric extends Component {
     const { onChange, ...props } = this.props;
     return (
       <input
+        type="number"
         {...props}
         className={cx("input block full", {
           "border-error":
@@ -27,14 +28,14 @@ export default class ChartSettingInputNumeric extends Component {
         })}
         value={this.state.value}
         onChange={e => {
-          let num = parseFloat(e.target.value);
+          const num = parseFloat(e.target.value);
           if (!isNaN(num) && num !== this.props.value) {
             onChange(num);
           }
           this.setState({ value: e.target.value });
         }}
         onBlur={e => {
-          let num = parseFloat(e.target.value);
+          const num = parseFloat(e.target.value);
           if (isNaN(num)) {
             onChange(undefined);
           } else {

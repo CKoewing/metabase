@@ -1,7 +1,7 @@
 /* @flow */
 
 import React, { Component } from "react";
-import { t } from "c-3po";
+import { t } from "ttag";
 import {
   MinRowsError,
   ChartSettingsError,
@@ -14,6 +14,7 @@ import {
   metricSetting,
   dimensionSetting,
 } from "metabase/visualizations/lib/settings/utils";
+import { columnSettings } from "metabase/visualizations/lib/settings/column";
 
 import FunnelNormal from "../components/FunnelNormal";
 import FunnelBar from "../components/FunnelBar";
@@ -22,8 +23,8 @@ import LegendHeader from "../components/LegendHeader";
 import _ from "underscore";
 import cx from "classnames";
 
-import type { VisualizationProps } from "metabase/meta/types/Visualization";
-import { TitleLegendHeader } from "metabase/visualizations/components/TitleLegendHeader";
+import type { VisualizationProps } from "metabase-types/types/Visualization";
+import TitleLegendHeader from "metabase/visualizations/components/TitleLegendHeader";
 
 export default class Funnel extends Component {
   props: VisualizationProps;
@@ -39,12 +40,16 @@ export default class Funnel extends Component {
     height: 4,
   };
 
-  static isSensible(cols, rows) {
+  static isSensible({ cols, rows }) {
     return cols.length === 2;
   }
 
   static checkRenderable(series, settings) {
-    const [{ data: { rows } }] = series;
+    const [
+      {
+        data: { rows },
+      },
+    ] = series;
     if (series.length > 1) {
       return;
     }
@@ -55,24 +60,58 @@ export default class Funnel extends Component {
     if (!settings["funnel.dimension"] || !settings["funnel.metric"]) {
       throw new ChartSettingsError(
         t`Which fields do you want to use?`,
-        t`Data`,
+        { section: t`Data` },
         t`Choose fields`,
       );
     }
   }
 
+  // NOTE: currently expects multi-series
+  static placeholderSeries = [
+    ["Homepage", 1000],
+    ["Product Page", 850],
+    ["Tiers Page", 700],
+    ["Trial Form", 200],
+    ["Trial Confirmation", 40],
+  ].map(row => ({
+    card: {
+      display: "funnel",
+      visualization_settings: {
+        "funnel.type": "funnel",
+        "funnel.dimension": "Total Sessions",
+      },
+      dataset_query: { type: "null" },
+    },
+    data: {
+      rows: [row],
+      cols: [
+        {
+          name: "Total Sessions",
+          base_type: "type/Text",
+        },
+        {
+          name: "Sessions",
+          base_type: "type/Integer",
+        },
+      ],
+    },
+  }));
+
   static settings = {
+    ...columnSettings({ hidden: true }),
     ...dimensionSetting("funnel.dimension", {
       section: t`Data`,
       title: t`Step`,
       dashboard: false,
       useRawSeries: true,
+      showColumnSetting: true,
     }),
     ...metricSetting("funnel.metric", {
       section: t`Data`,
       title: t`Measure`,
       dashboard: false,
       useRawSeries: true,
+      showColumnSetting: true,
     }),
     "funnel.type": {
       title: t`Funnel type`,
@@ -91,7 +130,12 @@ export default class Funnel extends Component {
   };
 
   static transformSeries(series) {
-    let [{ card, data: { rows, cols } }] = series;
+    const [
+      {
+        card,
+        data: { rows, cols },
+      },
+    ] = series;
 
     const settings = getComputedSettingsForSeries(series);
 
@@ -153,12 +197,16 @@ export default class Funnel extends Component {
               actionButtons={actionButtons}
             />
           )}
-          <LegendHeader
-            className="flex-no-shrink"
-            series={series._raw || series}
-            actionButtons={!hasTitle && actionButtons}
-            onChangeCardAndRun={onChangeCardAndRun}
-          />
+          {!hasTitle &&
+          actionButtons && ( // always show action buttons if we have them
+              <LegendHeader
+                className="flex-no-shrink"
+                // $FlowFixMe
+                series={series._raw || series}
+                actionButtons={actionButtons}
+                onChangeCardAndRun={onChangeCardAndRun}
+              />
+            )}
           <FunnelNormal {...this.props} className="flex-full" />
         </div>
       );

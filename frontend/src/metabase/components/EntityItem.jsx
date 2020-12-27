@@ -1,7 +1,7 @@
 import React from "react";
-import { t } from "c-3po";
+import { t } from "ttag";
 import cx from "classnames";
-import { Flex } from "grid-styled";
+import { Box, Flex } from "grid-styled";
 
 import EntityMenu from "metabase/components/EntityMenu";
 import Swapper from "metabase/components/Swapper";
@@ -10,14 +10,14 @@ import CheckBox from "metabase/components/CheckBox";
 import Ellipsified from "metabase/components/Ellipsified";
 import Icon from "metabase/components/Icon";
 
-import colors from "metabase/lib/colors";
+import { color, lighten } from "metabase/lib/colors";
 
 const EntityItemWrapper = Flex.extend`
-  border-bottom: 1px solid ${colors["bg-medium"]};
+  border-bottom: 1px solid ${color("bg-medium")};
   /* TODO - figure out how to use the prop instead of this? */
   align-items: center;
   &:hover {
-    color: ${colors["brand"]};
+    color: ${color("brand")};
   }
 `;
 
@@ -30,16 +30,23 @@ const EntityItem = ({
   onPin,
   onFavorite,
   onMove,
+  onCopy,
   onArchive,
   selected,
   onToggleSelected,
   selectable,
   variant,
   item,
+  buttons,
+  extraInfo,
+  pinned,
 }) => {
   const actions = [
     onPin && {
-      title: t`Pin this item`,
+      title:
+        item.collection_position != null
+          ? t`Unpin this item`
+          : t`Pin this item`,
       icon: "pin",
       action: onPin,
       event: `${analyticsContext};Entity Item;Pin Item;${item.model}`,
@@ -50,8 +57,14 @@ const EntityItem = ({
       action: onMove,
       event: `${analyticsContext};Entity Item;Move Item;${item.model}`,
     },
+    onCopy && {
+      title: t`Duplicate this item`,
+      icon: "clone",
+      action: onCopy,
+      event: `${analyticsContext};Entity Item;Copy Item;${item.model}`,
+    },
     onArchive && {
-      title: t`Archive`,
+      title: t`Archive this item`,
       icon: "archive",
       action: onArchive,
       event: `${analyticsContext};Entity Item;Archive Item;${item.model}`,
@@ -74,6 +87,24 @@ const EntityItem = ({
       break;
   }
 
+  function getPinnedBackground(model) {
+    return model === "dashboard"
+      ? color("accent4")
+      : lighten(color("accent4"), 0.28);
+  }
+
+  function getPinnedForeground(model) {
+    return model === "dashboard" ? color("white") : color("accent4");
+  }
+
+  function getBackground(model) {
+    return model === "dashboard" ? color("brand") : color("brand-light");
+  }
+
+  function getForeground(model) {
+    return model === "dashboard" ? color("white") : color("brand");
+  }
+
   return (
     <EntityItemWrapper
       {...spacing}
@@ -82,10 +113,15 @@ const EntityItem = ({
       })}
     >
       <IconWrapper
-        p={1}
+        p={"12px 13px"}
         mr={2}
-        align="center"
-        justify="center"
+        bg={
+          pinned ? getPinnedBackground(item.model) : getBackground(item.model)
+        }
+        color={
+          pinned ? getPinnedForeground(item.model) : getForeground(item.model)
+        }
+        borderRadius={"99px"}
         onClick={
           selectable
             ? e => {
@@ -99,22 +135,33 @@ const EntityItem = ({
           <Swapper
             startSwapped={selected}
             defaultElement={
-              <Icon name={iconName} color={iconColor} size={18} />
+              <Icon name={iconName} color={"inherit"} size={18} />
             }
             swappedElement={<CheckBox checked={selected} size={18} />}
           />
         ) : (
-          <Icon name={iconName} color={iconColor} size={18} />
+          <Icon name={iconName} color={"inherit"} size={18} />
         )}
       </IconWrapper>
-      <h3 className="overflow-hidden">
-        <Ellipsified>{name}</Ellipsified>
-      </h3>
+      <Box>
+        <h3 className="overflow-hidden">
+          <Ellipsified>{name}</Ellipsified>
+        </h3>
+        <Box>{extraInfo && extraInfo}</Box>
+      </Box>
 
-      <Flex ml="auto" align="center" onClick={e => e.preventDefault()}>
+      <Flex ml="auto" pr={1} align="center" onClick={e => e.preventDefault()}>
+        {buttons}
+        {item.description && (
+          <Icon
+            tooltip={item.description}
+            name="info"
+            className="ml1 text-medium"
+          />
+        )}
         {actions.length > 0 && (
           <EntityMenu
-            className="hover-child"
+            className="ml1 hover-child"
             triggerIcon="ellipsis"
             items={actions}
           />

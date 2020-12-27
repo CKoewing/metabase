@@ -1,9 +1,9 @@
 import React from "react";
 
-import colors, { alpha } from "metabase/lib/colors";
+import { color, alpha } from "metabase/lib/colors";
 import { formatValue } from "metabase/lib/formatting";
 
-const BAR_HEIGHT = 11;
+const BAR_HEIGHT = 8;
 const BAR_WIDTH = 70;
 const BORDER_RADIUS = 3;
 
@@ -13,8 +13,8 @@ const MiniBar = ({ value, extent: [min, max], options, cellHeight }) => {
   const hasNegative = min < 0;
   const isNegative = value < 0;
   const barPercent =
-    Math.abs(value) / Math.max(Math.abs(min), Math.abs(max)) * 100;
-  const barColor = isNegative ? colors["error"] : colors["brand"];
+    (Math.abs(value) / Math.max(Math.abs(min), Math.abs(max))) * 100;
+  const barColor = isNegative ? color("error") : color("brand");
 
   const barStyle = !hasNegative
     ? {
@@ -23,31 +23,31 @@ const MiniBar = ({ value, extent: [min, max], options, cellHeight }) => {
         borderRadius: BORDER_RADIUS,
       }
     : isNegative
-      ? {
-          width: barPercent / 2 + "%",
-          right: "50%",
-          borderTopRightRadius: 0,
-          borderBottomRightRadius: 0,
-          borderTopLeftRadius: BORDER_RADIUS,
-          borderBottomLeftRadius: BORDER_RADIUS,
-        }
-      : {
-          width: barPercent / 2 + "%",
-          left: "50%",
-          borderTopLeftRadius: 0,
-          borderBottomLeftRadius: 0,
-          borderTopRightRadius: BORDER_RADIUS,
-          borderBottomRightRadius: BORDER_RADIUS,
-        };
+    ? {
+        width: barPercent / 2 + "%",
+        right: "50%",
+        borderTopRightRadius: 0,
+        borderBottomRightRadius: 0,
+        borderTopLeftRadius: BORDER_RADIUS,
+        borderBottomLeftRadius: BORDER_RADIUS,
+      }
+    : {
+        width: barPercent / 2 + "%",
+        left: "50%",
+        borderTopLeftRadius: 0,
+        borderBottomLeftRadius: 0,
+        borderTopRightRadius: BORDER_RADIUS,
+        borderBottomRightRadius: BORDER_RADIUS,
+      };
 
   return (
-    <div className="flex align-center justify-end relative">
+    <div className="flex align-center currentcolor justify-end relative">
       {/* TEXT VALUE */}
       <div
-        className="text-ellipsis text-small text-bold text-medium text-right"
+        className="text-ellipsis text-bold text-right flex-full"
         style={{ minWidth: LABEL_MIN_WIDTH }}
       >
-        {formatValue(value, { ...options, jsx: true })}
+        {formatValue(value, { ...options, jsx: true, type: "cell" })}
       </div>
       {/* OUTER CONTAINER BAR */}
       <div

@@ -1,16 +1,19 @@
 /* @flow */
 
-import ChartSettingInput from "metabase/visualizations/components/settings/ChartSettingInput.jsx";
-import ChartSettingInputGroup from "metabase/visualizations/components/settings/ChartSettingInputGroup.jsx";
-import ChartSettingInputNumeric from "metabase/visualizations/components/settings/ChartSettingInputNumeric.jsx";
-import ChartSettingRadio from "metabase/visualizations/components/settings/ChartSettingRadio.jsx";
-import ChartSettingSelect from "metabase/visualizations/components/settings/ChartSettingSelect.jsx";
-import ChartSettingToggle from "metabase/visualizations/components/settings/ChartSettingToggle.jsx";
-import ChartSettingButtonGroup from "metabase/visualizations/components/settings/ChartSettingButtonGroup.jsx";
-import ChartSettingFieldPicker from "metabase/visualizations/components/settings/ChartSettingFieldPicker.jsx";
-import ChartSettingFieldsPicker from "metabase/visualizations/components/settings/ChartSettingFieldsPicker.jsx";
-import ChartSettingColorPicker from "metabase/visualizations/components/settings/ChartSettingColorPicker.jsx";
-import ChartSettingColorsPicker from "metabase/visualizations/components/settings/ChartSettingColorsPicker.jsx";
+import ChartSettingInput from "metabase/visualizations/components/settings/ChartSettingInput";
+import ChartSettingInputGroup from "metabase/visualizations/components/settings/ChartSettingInputGroup";
+import ChartSettingInputNumeric from "metabase/visualizations/components/settings/ChartSettingInputNumeric";
+import ChartSettingRadio from "metabase/visualizations/components/settings/ChartSettingRadio";
+import ChartSettingSelect from "metabase/visualizations/components/settings/ChartSettingSelect";
+import ChartSettingToggle from "metabase/visualizations/components/settings/ChartSettingToggle";
+import ChartSettingButtonGroup from "metabase/visualizations/components/settings/ChartSettingButtonGroup";
+import ChartSettingFieldPicker from "metabase/visualizations/components/settings/ChartSettingFieldPicker";
+import ChartSettingFieldsPicker from "metabase/visualizations/components/settings/ChartSettingFieldsPicker";
+import ChartSettingFieldsPartition from "metabase/visualizations/components/settings/ChartSettingFieldsPartition";
+import ChartSettingColorPicker from "metabase/visualizations/components/settings/ChartSettingColorPicker";
+import ChartSettingColorsPicker from "metabase/visualizations/components/settings/ChartSettingColorsPicker";
+
+import MetabaseAnalytics from "metabase/lib/analytics";
 
 export type SettingId = string;
 
@@ -28,17 +31,18 @@ export type SettingDef = {
   default?: any,
   hidden?: boolean,
   disabled?: boolean,
-  getTitle?: (object: any, settings: Settings) => ?string,
-  getHidden?: (object: any, settings: Settings) => boolean,
-  getDisabled?: (object: any, settings: Settings) => boolean,
+  getTitle?: (object: any, settings: Settings, extra: ExtraProps) => ?string,
+  getHidden?: (object: any, settings: Settings, extra: ExtraProps) => boolean,
+  getDisabled?: (object: any, settings: Settings, extra: ExtraProps) => boolean,
   getProps?: (
     object: any,
     settings: Settings,
     onChange: Function,
+    extra: ExtraProps,
   ) => { [key: string]: any },
-  getDefault?: (object: any, settings: Settings) => any,
-  getValue?: (object: any, settings: Settings) => any,
-  isValid?: (object: any, settings: Settings) => boolean,
+  getDefault?: (object: any, settings: Settings, extra: ExtraProps) => any,
+  getValue?: (object: any, settings: Settings, extra: ExtraProps) => any,
+  isValid?: (object: any, settings: Settings, extra: ExtraProps) => boolean,
   widget?: string | React$Component<any, any, any>,
   writeDependencies?: SettingId[],
   readDependencies?: SettingId[],
@@ -68,6 +72,7 @@ const WIDGETS = {
   buttonGroup: ChartSettingButtonGroup,
   field: ChartSettingFieldPicker,
   fields: ChartSettingFieldsPicker,
+  fieldsPartition: ChartSettingFieldsPartition,
   color: ChartSettingColorPicker,
   colors: ChartSettingColorsPicker,
 };
@@ -79,7 +84,7 @@ export function getComputedSettings(
   extra?: ExtraProps = {},
 ) {
   const computedSettings = {};
-  for (let settingId in settingsDefs) {
+  for (const settingId in settingsDefs) {
     getComputedSetting(
       computedSettings,
       settingsDefs,
@@ -106,7 +111,7 @@ function getComputedSetting(
 
   const settingDef = settingDefs[settingId] || {};
 
-  for (let dependentId of settingDef.readDependencies || []) {
+  for (const dependentId of settingDef.readDependencies || []) {
     getComputedSetting(
       computedSettings,
       settingDefs,
@@ -156,17 +161,18 @@ function getComputedSetting(
 function getSettingWidget(
   settingDefs: SettingDefs,
   settingId: SettingId,
-  settings: Settings,
+  storedSettings: Settings,
+  computedSettings: Settings,
   object: any,
   onChangeSettings: (settings: Settings) => void,
   extra?: ExtraProps = {},
 ): WidgetDef {
   const settingDef = settingDefs[settingId];
-  const value = settings[settingId];
+  const value = computedSettings[settingId];
   const onChange = value => {
     const newSettings = { [settingId]: value };
     for (const settingId of settingDef.writeDependencies || []) {
-      newSettings[settingId] = settings[settingId];
+      newSettings[settingId] = computedSettings[settingId];
     }
     onChangeSettings(newSettings);
   };
@@ -178,20 +184,21 @@ function getSettingWidget(
     id: settingId,
     value: value,
     title: settingDef.getTitle
-      ? settingDef.getTitle(object, settings, extra)
+      ? settingDef.getTitle(object, computedSettings, extra)
       : settingDef.title,
     hidden: settingDef.getHidden
-      ? settingDef.getHidden(object, settings, extra)
+      ? settingDef.getHidden(object, computedSettings, extra)
       : settingDef.hidden || false,
     disabled: settingDef.getDisabled
-      ? settingDef.getDisabled(object, settings, extra)
+      ? settingDef.getDisabled(object, computedSettings, extra)
       : settingDef.disabled || false,
     props: {
       ...(settingDef.props ? settingDef.props : {}),
       ...(settingDef.getProps
-        ? settingDef.getProps(object, settings, onChange, extra)
+        ? settingDef.getProps(object, computedSettings, onChange, extra)
         : {}),
     },
+    set: settingId in storedSettings,
     widget:
       typeof settingDef.widget === "string"
         ? WIDGETS[settingDef.widget]
@@ -202,7 +209,8 @@ function getSettingWidget(
 
 export function getSettingsWidgets(
   settingDefs: SettingDefs,
-  settings: Settings,
+  storedSettings: Settings,
+  computedSettings: Settings,
   object: any,
   onChangeSettings: (settings: Settings) => void,
   extra?: ExtraProps = {},
@@ -212,7 +220,8 @@ export function getSettingsWidgets(
       getSettingWidget(
         settingDefs,
         settingId,
-        settings,
+        storedSettings,
+        computedSettings,
         object,
         onChangeSettings,
         extra,
@@ -225,12 +234,32 @@ export function getPersistableDefaultSettings(
   settingsDefs: SettingDefs,
   completeSettings: Settings,
 ): Settings {
-  let persistableDefaultSettings = {};
-  for (let settingId in settingsDefs) {
+  const persistableDefaultSettings = {};
+  for (const settingId in settingsDefs) {
     const settingDef = settingsDefs[settingId];
     if (settingDef.persistDefault) {
       persistableDefaultSettings[settingId] = completeSettings[settingId];
     }
   }
   return persistableDefaultSettings;
+}
+
+export function updateSettings(
+  storedSettings: Settings,
+  changedSettings: Settings,
+): Settings {
+  for (const key of Object.keys(changedSettings)) {
+    MetabaseAnalytics.trackEvent("Chart Settings", "Change Setting", key);
+  }
+  const newSettings = {
+    ...storedSettings,
+    ...changedSettings,
+  };
+  // remove undefined settings
+  for (const [key, value] of Object.entries(changedSettings)) {
+    if (value === undefined) {
+      delete newSettings[key];
+    }
+  }
+  return newSettings;
 }

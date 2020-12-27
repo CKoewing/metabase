@@ -25,17 +25,19 @@ export function channelIsValid(channel, channelSpec) {
       return false;
   }
   if (channelSpec.recipients) {
-    if (!channel.recipients /* || channel.recipients.length === 0*/) {
+    // default from formInput is an empty array, not a null array
+    // check for both
+    if (!channel.recipients || channel.recipients.length < 1) {
       return false;
     }
   }
   if (channelSpec.fields) {
-    for (let field of channelSpec.fields) {
+    for (const field of channelSpec.fields) {
       if (
         field.required &&
         channel.details &&
         (channel.details[field.name] == null ||
-          channel.details[field.name] == "")
+          channel.details[field.name] === "")
       ) {
         return false;
       }
@@ -52,6 +54,14 @@ export function pulseIsValid(pulse, channelSpecs) {
         channelIsValid(c, channelSpecs && channelSpecs[c.channel_type]),
       ).length > 0) ||
     false
+  );
+}
+
+export function dashboardPulseIsValid(pulse, channelSpecs) {
+  return (
+    pulse.channels.filter(c =>
+      channelIsValid(c, channelSpecs && channelSpecs[c.channel_type]),
+    ).length > 0 || false
   );
 }
 

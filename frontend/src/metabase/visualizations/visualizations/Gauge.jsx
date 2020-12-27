@@ -2,17 +2,20 @@
 
 import React, { Component } from "react";
 import ReactDOM from "react-dom";
-import { t } from "c-3po";
+import { t } from "ttag";
 import d3 from "d3";
 import cx from "classnames";
 
-import colors from "metabase/lib/colors";
+import _ from "underscore";
+
+import { color } from "metabase/lib/colors";
 import { formatValue } from "metabase/lib/formatting";
 import { isNumeric } from "metabase/lib/schema_metadata";
+import { columnSettings } from "metabase/visualizations/lib/settings/column";
 
 import ChartSettingGaugeSegments from "metabase/visualizations/components/settings/ChartSettingGaugeSegments";
 
-import type { VisualizationProps } from "metabase/meta/types/Visualization";
+import type { VisualizationProps } from "metabase-types/types/Visualization";
 
 const MAX_WIDTH = 500;
 const PADDING_BOTTOM = 10;
@@ -22,15 +25,15 @@ const INNER_RADIUS_RATIO = 3.7 / 5;
 const INNER_RADIUS = OUTER_RADIUS * INNER_RADIUS_RATIO;
 
 // arrow shape, currently an equilateral triangle
-const ARROW_HEIGHT = (OUTER_RADIUS - INNER_RADIUS) * 2.5 / 4; // 2/3 of segment thickness
-const ARROW_BASE = ARROW_HEIGHT / Math.tan(64 / 180 * Math.PI);
+const ARROW_HEIGHT = ((OUTER_RADIUS - INNER_RADIUS) * 2.5) / 4; // 2/3 of segment thickness
+const ARROW_BASE = ARROW_HEIGHT / Math.tan((64 / 180) * Math.PI);
 const ARROW_STROKE_THICKNESS = 1.25;
 
 // colors
-const BACKGROUND_ARC_COLOR = colors["bg-medium"];
-const SEGMENT_LABEL_COLOR = colors["text-dark"];
-const CENTER_LABEL_COLOR = colors["text-dark"];
-const ARROW_FILL_COLOR = colors["text-medium"];
+const BACKGROUND_ARC_COLOR = color("bg-medium");
+const SEGMENT_LABEL_COLOR = color("text-dark");
+const CENTER_LABEL_COLOR = color("text-dark");
+const ARROW_FILL_COLOR = color("text-medium");
 const ARROW_STROKE_COLOR = "white";
 
 // in ems, but within the scaled 100px SVG element
@@ -46,8 +49,8 @@ const LABEL_OFFSET_PERCENT = 1.025;
 // total degrees of the arc (180 = semicircle, etc)
 const ARC_DEGREES = 180 + 45 * 2; // semicircle plus a bit
 
-const radians = degrees => degrees * Math.PI / 180;
-const degrees = radians => radians * 180 / Math.PI;
+const radians = degrees => (degrees * Math.PI) / 180;
+const degrees = radians => (radians * 180) / Math.PI;
 
 const segmentIsValid = s => !isNaN(s.min) && !isNaN(s.max);
 
@@ -60,11 +63,15 @@ export default class Gauge extends Component {
 
   static minSize = { width: 4, height: 4 };
 
-  static isSensible(cols, rows) {
+  static isSensible({ cols, rows }) {
     return rows.length === 1 && cols.length === 1;
   }
 
-  static checkRenderable([{ data: { cols, rows } }]) {
+  static checkRenderable([
+    {
+      data: { cols, rows },
+    },
+  ]) {
     if (!isNumeric(cols[0])) {
       throw new Error(t`Gauge visualization requires a number.`);
     }
@@ -77,6 +84,18 @@ export default class Gauge extends Component {
   _label: ?HTMLElement;
 
   static settings = {
+    ...columnSettings({
+      getColumns: (
+        [
+          {
+            data: { cols },
+          },
+        ],
+        settings,
+      ) => [
+        _.find(cols, col => col.name === settings["scalar.field"]) || cols[0],
+      ],
+    }),
     "gauge.range": {
       // currently not exposed in settings, just computed from gauge.segments
       getDefault(series, vizSettings) {
@@ -100,9 +119,9 @@ export default class Gauge extends Component {
           value = series[0].data.rows[0][0];
         } catch (e) {}
         return [
-          { min: 0, max: value / 2, color: colors["error"], label: "" },
-          { min: value / 2, max: value, color: colors["warning"], label: "" },
-          { min: value, max: value * 2, color: colors["success"], label: "" },
+          { min: 0, max: value / 2, color: color("error"), label: "" },
+          { min: value / 2, max: value, color: color("warning"), label: "" },
+          { min: value, max: value * 2, color: color("success"), label: "" },
         ];
       },
       widget: ChartSettingGaugeSegments,
@@ -146,7 +165,11 @@ export default class Gauge extends Component {
 
   render() {
     const {
-      series: [{ data: { rows, cols } }],
+      series: [
+        {
+          data: { rows, cols },
+        },
+      ],
       settings,
       className,
       isSettings,
@@ -162,13 +185,13 @@ export default class Gauge extends Component {
     const svgAspectRatio = viewBoxHeight / viewBoxWidth;
     const containerAspectRadio = height / width;
 
-    let svgWidth, svgHeight;
+    let svgWidth;
     if (containerAspectRadio < svgAspectRatio) {
       svgWidth = Math.min(MAX_WIDTH, height / svgAspectRatio);
     } else {
       svgWidth = Math.min(MAX_WIDTH, width);
     }
-    svgHeight = svgWidth * svgAspectRatio;
+    const svgHeight = svgWidth * svgAspectRatio;
 
     const showLabels = svgWidth > MIN_WIDTH_LABEL_THRESHOLD;
 
@@ -180,8 +203,8 @@ export default class Gauge extends Component {
       .linear()
       .domain(range) // NOTE: confusing, but the "range" is the domain for the arc scale
       .range([
-        ARC_DEGREES / 180 * -Math.PI / 2,
-        ARC_DEGREES / 180 * Math.PI / 2,
+        ((ARC_DEGREES / 180) * -Math.PI) / 2,
+        ((ARC_DEGREES / 180) * Math.PI) / 2,
       ])
       .clamp(true);
 
@@ -230,8 +253,7 @@ export default class Gauge extends Component {
             viewBox={`0 0 ${viewBoxWidth * expandWidthFactor} ${viewBoxHeight}`}
           >
             <g
-              transform={`translate(${viewBoxWidth *
-                expandWidthFactor /
+              transform={`translate(${(viewBoxWidth * expandWidthFactor) /
                 2},50)`}
             >
               {/* BACKGROUND ARC */}
@@ -248,7 +270,9 @@ export default class Gauge extends Component {
                   end={angle(segment.max)}
                   fill={segment.color}
                   segment={segment}
-                  onHoverChange={this.props.onHoverChange}
+                  column={column}
+                  settings={settings}
+                  onHoverChange={!showLabels ? this.props.onHoverChange : null}
                 />
               ))}
               {/* NEEDLE */}
@@ -265,7 +289,7 @@ export default class Gauge extends Component {
                       OUTER_RADIUS * LABEL_OFFSET_PERCENT,
                     )}
                   >
-                    {formatValue(value, { column })}
+                    {formatValue(value, settings.column(column))}
                   </GaugeSegmentLabel>
                 ))}
               {/* TEXT LABELS */}
@@ -299,7 +323,7 @@ export default class Gauge extends Component {
                   transform: "translate(0,0.2em)",
                 }}
               >
-                {formatValue(value, { column })}
+                {formatValue(value, settings.column(column))}
               </text>
             </g>
           </svg>
@@ -309,7 +333,15 @@ export default class Gauge extends Component {
   }
 }
 
-const GaugeArc = ({ start, end, fill, segment, onHoverChange }) => {
+const GaugeArc = ({
+  start,
+  end,
+  fill,
+  segment,
+  onHoverChange,
+  settings,
+  column,
+}) => {
   const arc = d3.svg
     .arc()
     .outerRadius(OUTER_RADIUS)
@@ -321,21 +353,30 @@ const GaugeArc = ({ start, end, fill, segment, onHoverChange }) => {
         endAngle: end,
       })}
       fill={fill}
-      onMouseMove={
-        onHoverChange && segment.label
-          ? e =>
-              onHoverChange({
-                data: [
-                  {
-                    key: segment.label,
-                    value: `${segment.min} - ${segment.max}`,
-                  },
-                ],
-                event: e.nativeEvent,
-              })
-          : null
-      }
-      onMouseLeave={onHoverChange ? () => onHoverChange(null) : null}
+      onMouseMove={e => {
+        if (onHoverChange) {
+          const options =
+            settings && settings.column && column
+              ? settings.column(column)
+              : {};
+          onHoverChange({
+            data: [
+              {
+                key: segment.label,
+                value: [segment.min, segment.max]
+                  .map(n => formatValue(n, options))
+                  .join(" - "),
+              },
+            ],
+            event: e.nativeEvent,
+          });
+        }
+      }}
+      onMouseLeave={() => {
+        if (onHoverChange) {
+          onHoverChange(null);
+        }
+      }}
     />
   );
 };
@@ -358,7 +399,7 @@ const GaugeSegmentLabel = ({ position: [x, y], style = {}, children }) => (
     x={x}
     y={y}
     style={{
-      fill: colors["text-medium"],
+      fill: color("text-medium"),
       fontSize: `${FONT_SIZE_SEGMENT_LABEL}em`,
       textAnchor: Math.abs(x) < 5 ? "middle" : x > 0 ? "start" : "end",
       // shift text in the lower half down a bit

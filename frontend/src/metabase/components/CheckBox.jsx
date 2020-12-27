@@ -1,8 +1,11 @@
 import React, { Component } from "react";
 import PropTypes from "prop-types";
+import cx from "classnames";
+
 import Icon from "metabase/components/Icon";
 
-import colors, { normal as defaultColors } from "metabase/lib/colors";
+import { color as c, normal as defaultColors } from "metabase/lib/colors";
+import { KEYCODE_SPACE } from "metabase/lib/keyboard";
 
 export default class CheckBox extends Component {
   static propTypes = {
@@ -19,6 +22,7 @@ export default class CheckBox extends Component {
     size: 16,
     padding: 2,
     color: "blue",
+    style: {},
   };
 
   onClick(e) {
@@ -32,38 +36,56 @@ export default class CheckBox extends Component {
     }
   }
 
+  onKeyPress = e => {
+    if (e.keyCode === KEYCODE_SPACE) {
+      this.onClick(e);
+    }
+  };
+
   render() {
-    const { checked, indeterminate, color, padding, size, noIcon } = this.props;
+    const {
+      className,
+      style,
+      checked,
+      indeterminate,
+      color,
+      padding,
+      size,
+      noIcon,
+    } = this.props;
 
     const checkedColor = defaultColors[color];
-    const uncheckedColor = colors["text-light"];
+    const uncheckedColor = c("text-light");
 
     const checkboxStyle = {
       width: size,
       height: size,
       backgroundColor: checked ? checkedColor : "white",
       border: `2px solid ${checked ? checkedColor : uncheckedColor}`,
+      borderRadius: 4,
     };
     return (
       <div
-        className="cursor-pointer"
+        className={cx(
+          className,
+          "flex align-center justify-center cursor-pointer",
+        )}
+        style={{ ...style, ...checkboxStyle }}
         onClick={e => {
           this.onClick(e);
         }}
+        onKeyPress={this.onKeyPress}
+        role="checkbox"
+        aria-checked={checked}
+        tabIndex="0"
       >
-        <div
-          style={checkboxStyle}
-          className="flex align-center justify-center rounded"
-        >
-          {(checked || indeterminate) &&
-            !noIcon && (
-              <Icon
-                style={{ color: checked ? "white" : uncheckedColor }}
-                name={indeterminate ? "dash" : "check"}
-                size={size - padding * 2}
-              />
-            )}
-        </div>
+        {(checked || indeterminate) && !noIcon && (
+          <Icon
+            style={{ color: checked ? "white" : uncheckedColor }}
+            name={indeterminate ? "dash" : "check"}
+            size={size - padding * 2}
+          />
+        )}
       </div>
     );
   }

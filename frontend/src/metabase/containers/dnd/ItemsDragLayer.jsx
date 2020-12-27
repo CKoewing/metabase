@@ -3,7 +3,7 @@ import { DragLayer } from "react-dnd";
 import _ from "underscore";
 
 import BodyComponent from "metabase/components/BodyComponent";
-import { NormalItem } from "metabase/components/CollectionLanding";
+import { NormalItem } from "metabase/collections/containers/CollectionContent";
 
 // NOTE: our verison of react-hot-loader doesn't play nice with react-dnd's DragLayer, so we exclude files named `*DragLayer.jsx` in webpack.config.js
 
@@ -58,7 +58,9 @@ class DraggedItems extends React.Component {
           transform: index > 0 ? `translate(0px, ${-index * 72}px)` : null,
         }}
       >
-        {items.map(item => <NormalItem item={item} />)}
+        {items.map(item => (
+          <NormalItem item={item} />
+        ))}
       </div>
     );
   }

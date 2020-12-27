@@ -16,7 +16,9 @@
              [collection :as collection]
              [interface :as mi]
              [pulse :as pulse :refer [Pulse]]
-             [pulse-channel :refer [channel-types]]]
+             [pulse-channel :refer [channel-types PulseChannel]]
+             [pulse-channel-recipient :refer [PulseChannelRecipient]]]
+            [metabase.plugins.classloader :as classloader]
             [metabase.pulse.render :as render]
             [metabase.util
              [i18n :refer [tru]]
@@ -28,11 +30,15 @@
              [hydrate :refer [hydrate]]])
   (:import java.io.ByteArrayInputStream))
 
+(u/ignore-exceptions (classloader/require 'metabase-enterprise.sandbox.api.util))
+
 (api/defendpoint GET "/"
   "Fetch all Pulses"
-  [archived]
-  {archived (s/maybe su/BooleanString)}
-  (as-> (pulse/retrieve-pulses {:archived? (Boolean/parseBoolean archived)}) <>
+  [archived dashboard_id]
+  {archived     (s/maybe su/BooleanString)
+   dashboard_id (s/maybe su/IntGreaterThanZero)}
+  (as-> (pulse/retrieve-pulses {:archived?    (Boolean/parseBoolean archived)
+                                :dashboard_id dashboard_id}) <>
     (filter mi/can-read? <>)
     (hydrate <> :can_write)))
 
@@ -80,17 +86,16 @@
 (api/defendpoint PUT "/:id"
   "Update a Pulse with `id`."
   [id :as {{:keys [name cards channels skip_if_empty collection_id archived], :as pulse-updates} :body}]
-  {name          (s/maybe su/NonBlankString)
-   cards         (s/maybe (su/non-empty [pulse/CoercibleToCardRef]))
-   channels      (s/maybe (su/non-empty [su/Map]))
-   skip_if_empty (s/maybe s/Bool)
-   collection_id (s/maybe su/IntGreaterThanZero)
-   archived      (s/maybe s/Bool)}
+  {name           (s/maybe su/NonBlankString)
+   cards          (s/maybe (su/non-empty [pulse/CoercibleToCardRef]))
+   channels       (s/maybe (su/non-empty [su/Map]))
+   skip_if_empty  (s/maybe s/Bool)
+   collection_id  (s/maybe su/IntGreaterThanZero)
+   archived       (s/maybe s/Bool)}
   ;; do various perms checks
   (let [pulse-before-update (api/write-check Pulse id)]
     (check-card-read-permissions cards)
     (collection/check-allowed-to-change-collection pulse-before-update pulse-updates)
-
     (db/transaction
       ;; If the collection or position changed with this update, we might need to fixup the old and/or new collection,
       ;; depending on what changed.
@@ -99,7 +104,7 @@
       (pulse/update-pulse!
        (assoc (select-keys pulse-updates [:name :cards :channels :skip_if_empty :collection_id :collection_position
                                           :archived])
-         :id id))))
+              :id id))))
   ;; return updated Pulse
   (pulse/retrieve-pulse id))
 
@@ -121,12 +126,19 @@
   (let [chan-types (-> channel-types
                        (assoc-in [:slack :configured] (slack/slack-configured?))
                        (assoc-in [:email :configured] (email/email-configured?)))]
-    {:channels (if-not (get-in chan-types [:slack :configured])
+    {:channels (cond
+                 (when-let [segmented-user? (resolve 'metabase-enterprise.sandbox.api.util/segmented-user?)]
+                   (segmented-user?))
+                 (dissoc chan-types :slack)
+
                  ;; no Slack integration, so we are g2g
+                 (not (get-in chan-types [:slack :configured]))
                  chan-types
+
                  ;; if we have Slack enabled build a dynamic list of channels/users
+                 :else
                  (try
-                   (let [slack-channels (for [channel (slack/channels-list)]
+                   (let [slack-channels (for [channel (slack/conversations-list)]
                                           (str \# (:name channel)))
                          slack-users    (for [user (slack/users-list)]
                                           (str \@ (:name user)))]
@@ -134,10 +146,13 @@
                    (catch Throwable e
                      (assoc-in chan-types [:slack :error] (.getMessage e)))))}))
 
-(defn- pulse-card-query-results [card]
-  (qp/process-query-and-save-execution! (:dataset_query card) {:executed-by api/*current-user-id*
-                                                               :context     :pulse
-                                                               :card-id     (u/get-id card)}))
+(defn- pulse-card-query-results
+  {:arglists '([card])}
+  [{query :dataset_query, card-id :id}]
+  (qp/process-query-and-save-execution! (assoc query :async? false)
+    {:executed-by api/*current-user-id*
+     :context     :pulse
+     :card-id     card-id}))
 
 (api/defendpoint GET "/preview_card/:id"
   "Get HTML rendering of a Card with `id`."
@@ -158,7 +173,7 @@
   (let [card      (api/read-check Card id)
         result    (pulse-card-query-results card)
         data      (:data result)
-        card-type (render/detect-pulse-card-type card data)
+        card-type (render/detect-pulse-chart-type card data)
         card-html (html (binding [render/*include-title* true]
                           (render/render-pulse-card-for-display (p/defaulted-timezone card) card result)))]
     {:id              id
@@ -188,8 +203,16 @@
    collection_id       (s/maybe su/IntGreaterThanZero)
    collection_position (s/maybe su/IntGreaterThanZero)}
   (check-card-read-permissions cards)
-  (p/send-pulse! body)
+  (p/send-pulse! (assoc body :creator_id api/*current-user-id*))
   {:ok true})
 
+(api/defendpoint DELETE "/:id/subscription/email"
+  "For users to unsubscribe themselves from a pulse subscription."
+  [id]
+  (api/let-404 [pulse-id (db/select-one-id Pulse :id id)
+                pc-id    (db/select-one-id PulseChannel :pulse_id pulse-id :channel_type "email")
+                pcr-id   (db/select-one-id PulseChannelRecipient :pulse_channel_id pc-id :user_id api/*current-user-id*)]
+    (db/delete! PulseChannelRecipient :id pcr-id))
+  api/generic-204-no-content)
 
 (api/define-routes)
